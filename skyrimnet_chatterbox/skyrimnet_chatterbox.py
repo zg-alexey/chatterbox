@@ -178,6 +178,21 @@ def generate(model, text,  language_id="en",audio_prompt_path=None, exaggeration
 
 ### SkyrimNet Zonos Emulated   
 
+def _normalize_audio_input(audio_value, field_name: str):
+    """Accept raw path strings from the API and ignore directory values."""
+    if isinstance(audio_value, dict) and "path" in audio_value:
+        audio_value = audio_value["path"]
+
+    if audio_value in (None, ""):
+        return None
+
+    audio_path = Path(audio_value)
+    if audio_path.exists() and audio_path.is_dir():
+        logger.warning(f"Ignoring directory passed as {field_name}: {audio_path}")
+        return None
+
+    return str(audio_path)
+
 def generate_audio(
     model_choice = None,
     text= "On that first day from Saturalia, My missus gave for me, A big bowl of moon sugar!",
@@ -212,9 +227,8 @@ def generate_audio(
     """Generate audio using configurable parameter system"""
     global IGNORE_PING
 
-    if isinstance(speaker_audio, dict) and 'path' in speaker_audio:
-        speaker_audio = speaker_audio['path']
-    logger.info(f"inputs: text={text}, language={language}, speaker_audio={Path(speaker_audio).stem if speaker_audio else 'None'}, seed={job_id}")
+    speaker_audio = _normalize_audio_input(speaker_audio, "speaker_audio")
+    prefix_audio = _normalize_audio_input(prefix_audio, "prefix_audio")
 
     if text == "ping":
        if IGNORE_PING is None:
@@ -222,6 +236,8 @@ def generate_audio(
        else:
           logger.info("Ping request received, sending silence audio.")
           return SILENCE_AUDIO_PATH, job_id
+
+    logger.info(f"inputs: text={text}, language={language}, speaker_audio={Path(speaker_audio).stem if speaker_audio else 'None'}, seed={job_id}")
 
     # Build payload with API values (map SkyrimNet UI names to our parameter names)
     # Note: linear->temperature, confidence->repetition_penalty, quadratic->exaggeration, cfg_scale->cfg_weight
@@ -258,7 +274,7 @@ def generate_audio(
         IGNORE_PING = True
         print(f"{wav_out}")
         Path(wav_out).unlink(missing_ok=True)
-        wav_out_path = SILENCE_AUDIO_PATH
+        wav_out = SILENCE_AUDIO_PATH
 
     return wav_out, job_id
 
@@ -335,10 +351,8 @@ with gr.Blocks() as demo:
     )
     model_choice = gr.Textbox(visible=False)
     language = gr.Textbox(visible=False)
-    speaker_audio = gr.Audio(sources=["upload", "microphone"], type="filepath",
-                             label="Reference Audio File", value=None, visible=False)
-    prefix_audio = gr.Audio(sources=["upload", "microphone"], type="filepath",
-                            label="Reference Audio File", value=None, visible=False)
+    speaker_audio = gr.Textbox(label="Reference Audio File", value=None, visible=False)
+    prefix_audio = gr.Textbox(label="Prefix Audio File", value=None, visible=False)
     emotion1 = gr.Number(visible=False)
     emotion2 = gr.Number(visible=False)
     emotion3 = gr.Number(visible=False)
